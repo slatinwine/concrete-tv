@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>清水电视 ConcreteTV — 网络电视播放器</title>
+<meta name="description" content="清水混凝土风格的网络电视（IPTV）播放器：HLS 直播、频道收藏、M3U 导入、在线频道库，纯前端单文件运行。">
+<meta name="theme-color" content="#c9c5bf">
+<meta property="og:title" content="清水电视 ConcreteTV">
+<meta property="og:description" content="浇筑一体的网络电视播放器 · Cast-in-place WebTV">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23c9c5bf'/%3E%3Crect x='7' y='7' width='50' height='50' fill='none' stroke='%23a2402c' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23413e39'/%3E%3C/svg%3E">
+<script>
+/* 首屏前应用主题，避免闪烁；并捕获脚本错误便于诊断 */
+window.__errs = [];
+window.addEventListener('error', function(e){
+  window.__errs.push((e.message||'error') + ' @' + (e.filename||'') + ':' + e.lineno + ':' + e.colno);
+});
+try{
+  var t = localStorage.getItem('ctv_theme');
+  if(t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)){
+    document.documentElement.dataset.theme = 'dark';
+  }
+}catch(e){}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+<style>
+/* ============================================================
+   清水混凝土设计系统 · CONCRETE DESIGN SYSTEM
+   ============================================================ */
+:root{
+  /* 昼 · 白昼混凝土 */
+  --c-050:#f0eee9;
+  --c-100:#e5e2dc;
+  --c-200:#d9d5cf;
+  --c-300:#c9c5bf;          /* 页面底 */
+  --c-400:#b6b2ab;
+  --c-500:#a29e96;
+  --c-600:#8a867e;
+  --c-700:#6b675f;
+  --c-800:#4c4842;
+  --c-900:#2c2a26;          /* 近黑 */
+  --ink:#232019;
+
+  --oxide:#a2402c;           /* 锈红 · 唯一的强调色 */
+  --oxide-deep:#7e2f1f;
+  --oxide-soft:rgba(162,64,44,.12);
+
+  --panel:var(--c-200);
+  --panel-hi:var(--c-100);
+  --alcove:#211f1c;          /* 壁龛（视频区） */
+  --txt:var(--c-900);
+  --txt-2:var(--c-700);
+  --txt-3:var(--c-600);
+
+  --line:rgba(58,54,48,.20);
+  --line-strong:rgba(58,54,48,.38);
+  --groove-hi:rgba(255,255,255,.55);
+
+  --font-ui:"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"SF Mono","Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+  --font-display:Georgia,"Noto Serif SC","Songti SC","STSong",SimSun,serif;
+
+  --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
+html[data-theme="dark"]{
+  /* 夜 · 夜色混凝土 */
+  --c-050:#4a463f;
+  --c-100:#413d37;
+  --c-200:#38352f;
+  --c-300:#2b2823;          /* 页面底 */
+  --c-400:#565148;
+  --c-500:#6e685d;
+  --c-600:#8a8378;
+  --c-700:#a39c8f;
+  --c-800:#c9c3b8;
+  --c-900:#e4dfd6;
+  --ink:#eee9df;
+
+  --oxide:#c05a42;
+  --oxide-deep:#8e3c2a;
+  --oxide-soft:rgba(192,90,66,.16);
+
+  --alcove:#171512;
+  --txt:var(--c-900);
+  --txt-2:var(--c-700);
+  --txt-3:var(--c-600);
+
+  --line:rgba(226,220,208,.14);
+  --line-strong:rgba(226,220,208,.30);
+  --groove-hi:rgba(255,255,255,.07);
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  font-family:var(--font-ui);
+  background:var(--c-300);
+  background-image:var(--noise);
+  color:var(--txt);
+  display:flex;flex-direction:column;
+  height:100vh;height:100dvh;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- 通用构件 ---------- */
+.stamp{
+  font-family:var(--font-mono);
+  font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--txt-3);user-select:none;white-space:nowrap;
+}
+.tiehole{
+  position:absolute;width:8px;height:8px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.30), rgba(0,0,0,.30) 72%);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.38), 0 1px 0 var(--groove-hi);
+  pointer-events:none;
+}
+.th-tl{top:9px;left:9px;} .th-tr{top:9px;right:9px;}
+.th-bl{bottom:9px;left:9px;} .th-br{bottom:9px;right:9px;}
+
+button{
+  font-family:var(--font-ui);cursor:pointer;
+  border:1px solid var(--line-strong);
+  border-top-color:var(--groove-hi);
+  background:var(--c-200);
+  color:var(--c-800);
+  border-radius:2px;padding:8px 14px;font-size:13px;line-height:1;
+  box-shadow:0 1px 0 rgba(0,0,0,.08), 0 1px 0 var(--groove-hi) inset;
+  transition:background .12s,color .12s,border-color .12s;
+}
+button:hover{background:var(--c-100);color:var(--txt);}
+button:active{transform:translateY(1px);box-shadow:0 0 0 rgba(0,0,0,0);}
+button:focus-visible{outline:2px solid var(--oxide);outline-offset:2px;}
+button.oxide{
+  background:var(--oxide);border-color:var(--oxide-deep);color:#f6f0e9;
+}
+button.oxide:hover{background:var(--oxide-deep);color:#f6f0e9;}
+button.ghost{background:transparent;border-color:var(--line);box-shadow:none;}
+button.ghost:hover{border-color:var(--line-strong);background:var(--oxide-soft);color:var(--txt);}
+
+/* ============================================================
+   顶梁 · HEADER BEAM
+   ============================================================ */
+header{
+  position:relative;flex:0 0 auto;
+  display:flex;align-items:center;gap:18px;
+  padding:0 26px;height:62px;
+  background:var(--panel);
+  background-image:var(--noise);
+  border-bottom:1px solid var(--line-strong);
+  box-shadow:0 1px 0 var(--groove-hi) inset, 0 4px 14px rgba(35,32,25,.10);
+  z-index:20;
+}
+.brand{display:flex;align-items:center;gap:13px;min-width:0;}
+.brand-mark{
+  width:34px;height:34px;flex:0 0 auto;position:relative;
+  background:var(--oxide);border-radius:2px;
+  box-shadow:0 2px 5px rgba(35,32,25,.28), 0 1px 0 rgba(255,255,255,.35) inset;
+}
+.brand-mark::after{
+  content:"";position:absolute;top:50%;left:50%;
+  width:9px;height:9px;border-radius:50%;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.28), rgba(0,0,0,.42) 72%);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5);
+}
+.brand-text h1{
+  font-family:var(--font-display);
+  font-size:21px;font-weight:700;letter-spacing:.06em;line-height:1.1;
+  white-space:nowrap;
+}
+.brand-text .stamp{display:block;margin-top:2px;}
+
+.search{flex:1 1 auto;max-width:430px;position:relative;min-width:120px;}
+.search input{
+  width:100%;padding:9px 12px 9px 36px;
+  background:var(--c-050);
+  border:1px solid var(--line-strong);border-radius:2px;
+  box-shadow:0 2px 4px rgba(35,32,25,.14) inset, 0 1px 0 var(--groove-hi);
+  color:var(--ink);font-size:13px;outline:none;
+}
+.search input::placeholder{color:var(--txt-3);}
+.search input:focus{border-color:var(--oxide);background:var(--c-050);}
+.search .glyph{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%) rotate(-45deg);
+  width:10px;height:10px;border:1.5px solid var(--txt-3);border-radius:50%;
+  pointer-events:none;
+}
+.search .glyph::after{
+  content:"";position:absolute;right:-4px;bottom:-3px;width:5px;height:1.5px;
+  background:var(--txt-3);transform:rotate(45deg);
+}
+.actions{display:flex;gap:8px;margin-left:auto;flex:0 0 auto;}
+.actions .divider{width:1px;background:var(--line);margin:2px 4px;}
+
+/* ============================================================
+   轴线 · AXIS STRIP
+   ============================================================ */
+.axis{
+  flex:0 0 auto;display:flex;align-items:center;gap:0;
+  background:var(--c-200);background-image:var(--noise);
+  border-bottom:1px solid var(--line);
+  padding:0 26px;height:30px;overflow:hidden;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;
+  color:var(--txt-2);user-select:none;
+}
+.axis span{display:flex;align-items:center;height:100%;padding:0 14px;border-right:1px solid var(--line);white-space:nowrap;}
+.axis span:first-child{padding-left:0;}
+.axis .grow{flex:1;border-right:none;}
+.axis .dot{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:7px;background:var(--txt-3);vertical-align:middle;}
+.axis .dot.busy{background:#b98a2e;animation:pulse 1s ease-in-out infinite;}
+.axis .dot.ok{background:var(--oxide);animation:pulse 2.2s ease-in-out infinite;}
+.axis .dot.err{background:var(--oxide-deep);}
+@keyframes pulse{50%{opacity:.35;}}
+
+/* ============================================================
+   主体 · CORE
+   ============================================================ */
+main{flex:1;display:flex;min-height:0;}
+
+/* ---------- 侧墙 · SIDEBAR ---------- */
+aside{
+  width:314px;flex:0 0 314px;position:relative;
+  display:flex;flex-direction:column;min-height:0;
+  background:var(--panel);background-image:var(--noise);
+  border-right:1px solid var(--line-strong);
+  box-shadow:1px 0 0 var(--groove-hi) inset;
+}
+.side-head{
+  position:relative;flex:0 0 auto;
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:15px 18px 12px;
+  border-bottom:1px solid var(--line);
+}
+.side-head b{
+  font-family:var(--font-display);font-size:15px;letter-spacing:.08em;font-weight:700;
+}
+.cats{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;
+  padding:12px 16px;border-bottom:1px solid var(--line);
+  max-height:128px;overflow-y:auto;
+}
+.cat{
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;
+  padding:5px 10px;border:1px solid var(--line);border-radius:2px;
+  color:var(--txt-2);cursor:pointer;user-select:none;white-space:nowrap;
+  background:transparent;transition:all .12s;
+}
+.cat:hover{border-color:var(--line-strong);color:var(--txt);}
+.cat.on{
+  background:var(--oxide-soft);border-color:var(--oxide);color:var(--oxide);
+  font-weight:600;
+  box-shadow:0 0 0 1px var(--oxide) inset;
+}
+.cat small{opacity:.55;margin-left:4px;}
+
+.chlist{flex:1;overflow-y:auto;padding:4px 0 8px;}
+.chlist::after{
+  content:"— 索引止点 · END OF INDEX —";
+  display:flex;align-items:flex-end;justify-content:center;
+  height:110px;padding-bottom:12px;margin-top:6px;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.28em;color:var(--txt-3);
+  background:repeating-linear-gradient(-45deg,transparent 0 9px,rgba(58,54,48,.06) 9px 10px);
+  user-select:none;
+}
+.ch{
+  display:flex;align-items:center;gap:0;
+  border-bottom:1px solid var(--line);
+  cursor:pointer;position:relative;transition:background .1s;
+}
+.ch:hover{background:rgba(58,54,48,.05);}
+html[data-theme="dark"] .ch:hover{background:rgba(226,220,208,.05);}
+.ch .n{
+  flex:0 0 52px;text-align:center;
+  font-family:var(--font-mono);font-size:12px;color:var(--txt-3);
+  padding:11px 0;border-right:1px solid var(--line);
+}
+.ch .nm{
+  flex:1;padding:11px 12px;font-size:13.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ch .g{
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;
+  color:var(--txt-3);border:1px solid var(--line);border-radius:2px;
+  padding:2px 5px;margin-right:8px;white-space:nowrap;
+}
+.ch .star{
+  flex:0 0 44px;text-align:center;font-size:15px;
+  color:var(--txt-3);opacity:.45;padding:11px 0;
+  user-select:none;transition:all .12s;
+}
+.ch .star:hover{opacity:1;color:var(--oxide);transform:scale(1.15);}
+.ch .star.on{opacity:1;color:#b98a2e;}
+.ch.on{background:var(--oxide-soft);}
+.ch.on::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--oxide);box-shadow:1px 0 0 rgba(0,0,0,.15);
+}
+.ch.on .n{color:var(--oxide);font-weight:700;}
+.ch.on .nm{color:var(--oxide);font-weight:600;}
+
+.side-foot{
+  flex:0 0 auto;padding:10px 18px;
+  border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;
+}
+.side-foot .stamp{letter-spacing:.14em;}
+
+.empty{
+  padding:44px 22px;text-align:center;color:var(--txt-3);
+  font-size:12.5px;line-height:2.1;
+}
+.empty pre{
+  font-family:var(--font-mono);font-size:11px;line-height:1.5;
+  color:var(--txt-2);margin-bottom:10px;letter-spacing:.05em;
+}
+
+/* ---------- 舞台 · STAGE ---------- */
+.stage{flex:1;display:flex;flex-direction:column;min-width:0;}
+.alcove{
+  flex:1;position:relative;min-height:0;margin:16px;
+  background:var(--alcove);background-image:var(--noise);
+  border:1px solid rgba(0,0,0,.55);
+  border-top-color:var(--line);
+  box-shadow:0 0 0 1px var(--groove-hi), 0 18px 42px rgba(20,18,14,.42);
+  overflow:hidden;
+}
+.alcove video{
+  width:100%;height:100%;object-fit:contain;background:transparent;
+  display:block;cursor:pointer;
+}
+.alcove::after{ /* 壁龛顶部微光 */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset;
+}
+
+/* OSD */
+.osd{
+  position:absolute;top:14px;left:14px;z-index:6;
+  display:flex;align-items:center;gap:13px;
+  background:rgba(24,22,19,.78);
+  border:1px solid rgba(226,220,208,.14);border-radius:2px;
+  padding:9px 16px;
+  opacity:0;transform:translateY(-6px);
+  transition:opacity .35s,transform .35s;
+  pointer-events:none;backdrop-filter:blur(3px);
+}
+.osd.show{opacity:1;transform:translateY(0);}
+.osd .num{
+  font-family:var(--font-mono);font-size:23px;font-weight:700;
+  color:#d3816b;letter-spacing:.04em;min-width:34px;text-align:right;
+}
+.osd .nm{color:#e8e3da;font-size:14px;letter-spacing:.04em;}
+.osd .live{
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.2em;
+  color:#d3816b;border:1px solid #d3816b;border-radius:2px;padding:2px 6px;
+  display:none;
+}
+.osd.playing .live{display:block;animation:pulse 2.2s infinite;}
+.digits{
+  position:absolute;top:14px;right:16px;z-index:6;
+  font-family:var(--font-mono);font-size:26px;font-weight:700;
+  color:#d3816b;letter-spacing:.1em;
+  background:rgba(24,22,19,.78);border:1px solid rgba(226,220,208,.14);
+  border-radius:2px;padding:6px 14px;
+  opacity:0;transition:opacity .15s;pointer-events:none;
+}
+.digits.show{opacity:1;}
+
+/* 中央信息层 */
+.center{
+  position:absolute;inset:0;z-index:5;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  text-align:center;padding:24px;
+  background:rgba(23,21,18,.55);
+  transition:opacity .25s;
+}
+.center.hidden{display:none;}
+.center .t1{font-family:var(--font-display);font-size:18px;letter-spacing:.1em;color:#e8e3da;}
+.center .t2{font-size:12px;line-height:1.9;color:rgba(232,227,218,.55);max-width:460px;}
+.spinner{
+  width:42px;height:42px;border-radius:50%;
+  border:2.5px solid rgba(232,227,218,.15);border-top-color:var(--oxide);
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.bigplay{
+  width:76px;height:76px;border-radius:50%;padding:0;
+  background:var(--oxide);border:1px solid var(--oxide-deep);color:#f6f0e9;
+  box-shadow:0 6px 18px rgba(0,0,0,.4);
+}
+.bigplay::after{
+  content:"";display:block;width:0;height:0;margin-left:7px;
+  border-style:solid;border-width:13px 0 13px 22px;
+  border-color:transparent transparent transparent #f6f0e9;
+}
+.bigplay:hover{background:var(--oxide-deep);}
+.nosignal{color:rgba(232,227,218,.5);font-size:12px;letter-spacing:.1em;}
+
+/* 取消静音浮标 */
+.unmute{
+  position:absolute;right:14px;bottom:14px;z-index:7;display:none;
+  background:var(--oxide);border:1px solid var(--oxide-deep);color:#f6f0e9;
+  padding:8px 14px;font-size:12px;border-radius:2px;
+  box-shadow:0 4px 12px rgba(0,0,0,.35);
+}
+.unmute.show{display:block;animation:pulse 2.5s infinite;}
+
+/* ---------- 控制板 · CONTROL SLAB ---------- */
+.slab{
+  flex:0 0 auto;display:flex;align-items:center;gap:9px;flex-wrap:nowrap;overflow:hidden;
+  margin:0 16px 16px;padding:12px 18px;
+  background:var(--panel);background-image:var(--noise);
+  border:1px solid var(--line-strong);
+  border-top-color:var(--groove-hi);
+  box-shadow:0 1px 0 var(--groove-hi) inset, 0 6px 16px rgba(35,32,25,.10);
+}
+.now{min-width:0;flex:0 1 auto;margin-right:6px;}
+.now .nm{
+  font-size:14px;font-weight:600;letter-spacing:.02em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.now .stamp{margin-top:3px;display:block;}
+.spacer{flex:1;}
+.vol{display:flex;align-items:center;gap:9px;}
+.vol input[type="range"]{
+  -webkit-appearance:none;appearance:none;
+  width:96px;height:16px;background:transparent;cursor:pointer;
+}
+.vol input[type="range"]::-webkit-slider-runnable-track{
+  height:4px;border-radius:1px;
+  background:linear-gradient(to right, var(--oxide) var(--pct,80%), rgba(58,54,48,.28) var(--pct,80%));
+  box-shadow:0 1px 2px rgba(0,0,0,.25) inset;
+}
+.vol input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:2px;
+  background:var(--c-050);border:1px solid var(--line-strong);
+  box-shadow:0 1px 3px rgba(0,0,0,.35), 0 1px 0 var(--groove-hi) inset;
+  margin-top:-5px;
+}
+.vol input[type="range"]::-moz-range-track{
+  height:4px;background:rgba(58,54,48,.28);border-radius:1px;
+}
+.vol input[type="range"]::-moz-range-progress{height:4px;background:var(--oxide);}
+.vol input[type="range"]::-moz-range-thumb{
+  width:13px;height:13px;border-radius:2px;background:var(--c-100);
+  border:1px solid var(--line-strong);
+}
+
+/* ============================================================
+   弹层 · MODALS
+   ============================================================ */
+.mask{
+  position:fixed;inset:0;z-index:100;
+  background:rgba(23,21,18,.55);backdrop-filter:blur(2px);
+  display:none;align-items:center;justify-content:center;padding:18px;
+}
+.mask.show{display:flex;}
+.modal{
+  width:540px;max-width:100%;max-height:86vh;overflow-y:auto;position:relative;
+  background:var(--panel);background-image:var(--noise);
+  border:1px solid var(--line-strong);
+  box-shadow:0 1px 0 var(--groove-hi) inset, 0 24px 60px rgba(20,18,14,.5);
+  padding:26px 28px;
+}
+.modal h3{
+  font-family:var(--font-display);font-size:17px;letter-spacing:.08em;
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:18px;padding-bottom:12px;
+  border-bottom:1px solid var(--line);
+}
+.modal h3 .x{
+  cursor:pointer;color:var(--txt-3);font-size:22px;line-height:1;
+  padding:2px 6px;font-weight:400;font-family:var(--font-ui);
+}
+.modal h3 .x:hover{color:var(--oxide);}
+.field{margin-bottom:14px;}
+.field label{
+  display:block;font-family:var(--font-mono);font-size:10px;
+  letter-spacing:.18em;color:var(--txt-3);margin-bottom:6px;text-transform:uppercase;
+}
+.field input[type="text"],.field textarea{
+  width:100%;padding:10px 12px;
+  background:var(--c-050);color:var(--ink);font-size:13px;
+  border:1px solid var(--line-strong);border-radius:2px;outline:none;
+  font-family:inherit;
+  box-shadow:0 2px 4px rgba(35,32,25,.14) inset, 0 1px 0 var(--groove-hi);
+}
+.field input::placeholder,.field textarea::placeholder{color:var(--txt-3);}
+.field textarea{height:148px;resize:vertical;font-family:var(--font-mono);font-size:12px;}
+.field input:focus,.field textarea:focus{border-color:var(--oxide);}
+.modal .tip{font-size:12px;color:var(--txt-3);line-height:1.8;margin:10px 0 0;}
+.modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px;}
+.or{ text-align:center;font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--txt-3);margin:6px 0;}
+
+.kbd-grid{display:grid;grid-template-columns:auto 1fr;gap:9px 18px;font-size:13px;align-items:center;}
+.kbd-grid kbd{
+  font-family:var(--font-mono);font-size:11px;color:var(--oxide);
+  border:1px solid var(--line);border-radius:2px;padding:2px 8px;
+  background:rgba(58,54,48,.04);white-space:nowrap;
+}
+
+/* toast */
+#toast{
+  position:fixed;bottom:26px;left:50%;z-index:200;
+  transform:translateX(-50%) translateY(16px);
+  background:var(--c-900);color:var(--c-100);
+  border:1px solid var(--line-strong);border-radius:2px;
+  padding:10px 22px;font-size:12.5px;letter-spacing:.03em;
+  opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;
+  box-shadow:0 8px 24px rgba(20,18,14,.4);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* 滚动条 */
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--c-400);border:2px solid var(--c-200);}
+::-webkit-scrollbar-thumb:hover{background:var(--c-500);}
+
+/* ---------- 响应式 ---------- */
+#btnMenu{display:none;}
+@media (max-width:1360px){ #btnCopy{display:none;} }
+@media (max-width:1240px){ #btnPip{display:none;} }
+@media (max-width:1140px){ #btnPrev,#btnNext{display:none;} }
+@media (max-width:820px){
+  header{padding:0 14px;gap:10px;height:56px;}
+  .brand-text .stamp{display:none;}
+  .axis{padding:0 14px;} .axis span:nth-child(3){display:none;}
+  aside{
+    position:absolute;z-index:30;top:0;bottom:0;left:0;
+    transform:translateX(-102%);transition:transform .25s ease;
+    box-shadow:12px 0 40px rgba(20,18,14,.4);
+  }
+  aside.open{transform:translateX(0);}
+  #btnMenu{display:inline-block;}
+  .alcove{margin:10px;}
+  .slab{margin:0 10px 10px;padding:10px 12px;}
+  .now{max-width:120px;}
+  .actions button:not(.icon-only){display:none;}
+  .actions .divider{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 顶梁 ============ -->
+<header>
+  <i class="tiehole th-tl"></i><i class="tiehole th-tr"></i>
+  <i class="tiehole th-bl"></i><i class="tiehole th-br"></i>
+
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div class="brand-text">
+      <h1>清水电视</h1>
+      <span class="stamp">ConcreteTV · Cast-in-Place WebTV</span>
+    </div>
+  </div>
+
+  <div class="search">
+    <span class="glyph" aria-hidden="true"></span>
+    <input id="searchInput" type="text" placeholder="检索频道…"
+           aria-label="搜索频道" autocomplete="off">
+  </div>
+
+  <div class="actions">
+    <button id="btnOnline" title="从 iptv.org 拉取公开中国频道">在线频道库</button>
+    <button id="btnImport">导入 M3U</button>
+    <button id="btnAdd">+ 添加频道</button>
+    <button id="btnHelp" title="快捷键 (?)">帮助</button>
+    <button id="btnTheme" title="昼 / 夜切换">夜</button>
+    <span class="divider"></span>
+    <button id="btnMenu" class="icon-only" title="频道列表">☰ 频道</button>
+  </div>
+</header>
+
+<!-- ============ 轴线 ============ -->
+<div class="axis" aria-hidden="true">
+  <span>GRID A-A</span>
+  <span id="axisTotal">CHANNELS 000</span>
+  <span id="axisGroup">BLK 演示</span>
+  <span class="grow"></span>
+  <span><i class="dot" id="axisDot"></i><em id="axisState" style="font-style:normal">STANDBY</em></span>
+  <span>清水混凝土施工法 · SPAN 32.0M</span>
+</div>
+
+<main>
+  <!-- ============ 侧墙 ============ -->
+  <aside id="sidebar" aria-label="频道列表">
+    <div class="side-head">
+      <b>频道索引</b>
+      <span class="stamp">INDEX</span>
+    </div>
+    <div class="cats" id="catBar"></div>
+    <div class="chlist" id="chList"></div>
+    <div class="side-foot">
+      <span class="stamp" id="footCount">TOTAL —</span>
+      <span class="stamp">CTV-01 · 2026</span>
+    </div>
+  </aside>
+
+  <!-- ============ 舞台 ============ -->
+  <section class="stage">
+    <div class="alcove" id="alcove">
+      <video id="video" playsinline></video>
+
+      <div class="osd" id="osd">
+        <span class="num" id="osdNum">--</span>
+        <span class="nm" id="osdName">未选台</span>
+        <span class="live">LIVE</span>
+      </div>
+      <div class="digits" id="osdDigits"></div>
+
+      <div class="center" id="centerBox">
+        <div class="t1">选择左侧频道开始观看</div>
+        <div class="t2">点「在线频道库」拉取数百个公开频道，或「导入 M3U」接入你自己的播放列表</div>
+      </div>
+
+      <button class="unmute" id="unmuteBtn">🔇 已静音播放 · 点击恢复声音</button>
+    </div>
+
+    <div class="slab">
+      <div class="now">
+        <div class="nm" id="curName">未选台</div>
+        <span class="stamp" id="curGroup">NO SIGNAL</span>
+      </div>
+      <div class="spacer"></div>
+      <button id="btnPrev" title="上一个 ↑ / PgUp">« 上一台</button>
+      <button id="btnNext" title="下一个 ↓ / PgDn">下一台 »</button>
+      <button id="btnPlay" title="播放 / 暂停（空格）">暂停</button>
+      <div class="vol">
+        <button id="btnMute" class="ghost" title="静音（M）" aria-label="静音">有声</button>
+        <input type="range" id="volRange" min="0" max="100" value="80"
+               aria-label="音量" title="音量 ←/→">
+      </div>
+      <button id="btnCopy" class="ghost" title="复制当前源地址">⧉ 复制源</button>
+      <button id="btnFav2" class="ghost" title="收藏当前频道">☆ 收藏</button>
+      <button id="btnPip" class="ghost" title="画中画">画中画</button>
+      <button id="btnFull" title="全屏（F）">全屏</button>
+    </div>
+  </section>
+</main>
+
+<!-- ============ 添加频道 ============ -->
+<div class="mask" id="modalAdd" role="dialog" aria-modal="true" aria-label="添加频道">
+  <div class="modal">
+    <i class="tiehole th-tl"></i><i class="tiehole th-tr"></i>
+    <i class="tiehole th-bl"></i><i class="tiehole th-br"></i>
+    <h3>添加频道 <span class="x" data-close tabindex="0" role="button">&times;</span></h3>
+    <div class="field"><label>Channel Name / 频道名称</label>
+      <input type="text" id="addName" placeholder="例如：CCTV-1 综合"></div>
+    <div class="field"><label>Source URL / 播放地址（m3u8、mp4 直链）</label>
+      <input type="text" id="addUrl" placeholder="https://example.com/live/index.m3u8"></div>
+    <div class="field"><label>Block / 分组（可选）</label>
+      <input type="text" id="addGroup" placeholder="自定义"></div>
+    <div class="modal-actions">
+      <button class="ghost" data-close>取消</button>
+      <button class="oxide" id="addConfirm">保存并播放</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 导入 M3U ============ -->
+<div class="mask" id="modalImport" role="dialog" aria-modal="true" aria-label="导入 M3U 播放列表">
+  <div class="modal">
+    <i class="tiehole th-tl"></i><i class="tiehole th-tr"></i>
+    <i class="tiehole th-bl"></i><i class="tiehole th-br"></i>
+    <h3>导入 M3U 播放列表 <span class="x" data-close tabindex="0" role="button">&times;</span></h3>
+    <div class="field"><label>Playlist URL / 列表链接</label>
+      <input type="text" id="importUrl" placeholder="https://example.com/playlist.m3u"></div>
+    <div class="or">— OR —</div>
+    <div class="field"><label>Paste Content / 粘贴 M3U 文本</label>
+      <textarea id="importText" placeholder="#EXTM3U&#10;#EXTINF:-1 group-title=&quot;央视&quot;,CCTV-1&#10;https://…/cctv1.m3u8"></textarea></div>
+    <div class="tip">导入的频道进入「导入」分组，保存在本机浏览器中。链接方式受跨域限制，失败时请改用粘贴。</div>
+    <div class="modal-actions">
+      <button class="ghost" data-close>取消</button>
+      <button class="oxide" id="importConfirm">导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 帮助 ============ -->
+<div class="mask" id="modalHelp" role="dialog" aria-modal="true" aria-label="使用帮助">
+  <div class="modal">
+    <i class="tiehole th-tl"></i><i class="tiehole th-tr"></i>
+    <i class="tiehole th-bl"></i><i class="tiehole th-br"></i>
+    <h3>使用帮助 <span class="x" data-close tabindex="0" role="button">&times;</span></h3>
+    <div class="kbd-grid">
+      <kbd>↑ / PgUp</kbd><span>上一个频道</span>
+      <kbd>↓ / PgDn</kbd><span>下一个频道</span>
+      <kbd>0–9</kbd><span>数字选台（回车确认，或稍候自动换台）</span>
+      <kbd>Space</kbd><span>播放 / 暂停</span>
+      <kbd>← / →</kbd><span>音量 − ／ ＋</span>
+      <kbd>M</kbd><span>静音</span>
+      <kbd>F</kbd><span>全屏（视频区双击同样有效）</span>
+      <kbd>/</kbd><span>聚焦搜索</span>
+      <kbd>?</kbd><span>打开本帮助</span>
+      <kbd>Esc</kbd><span>关闭弹窗 / 清空搜索</span>
+    </div>
+    <div class="tip">
+      本页面为纯前端 IPTV 播放器，数据不经过任何服务器。演示分组为官方测试流，可稳定播放；
+      「在线频道库」来自 iptv.org 公开项目，部分直播源可能失效或受地域限制，播不出时换台即可。
+      收藏、自定义频道与主题偏好均保存在本地浏览器。
+    </div>
+    <div class="modal-actions">
+      <button class="oxide" data-close>知道了</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+var VERSION = 'CTV-01 · v1.0';
+var $ = function(id){ return document.getElementById(id); };
+var video = $('video');
+var hls = null;
+
+/* ================= 存储 ================= */
+var store = {
+  get:function(k,d){ try{ var v=localStorage.getItem('ctv_'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+  set:function(k,v){ try{ localStorage.setItem('ctv_'+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ================= 频道数据 ================= */
+var DEFAULTS = [
+  {name:'MUX 测试频道',       group:'演示', url:'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'},
+  {name:'Apple 演示 fMP4',    group:'演示', url:'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8'},
+  {name:'Sintel 电影演示',    group:'演示', url:'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8'},
+  {name:'CCTV-1 综合', group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/cctv1_2/index.m3u8'},
+  {name:'CCTV-3 综艺', group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/cctv3_2/index.m3u8'},
+  {name:'CCTV-5 体育', group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/cctv5_2/index.m3u8'},
+  {name:'CCTV-6 电影', group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/cctv6_2/index.m3u8'},
+  {name:'湖南卫视',    group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/hntv1/index.m3u8'},
+  {name:'浙江卫视',    group:'公共源', url:'https://cctvcnch5c.v.wscdns.com/live/zjtv1/index.m3u8'}
+];
+var ONLINE_URL = 'https://iptv-org.github.io/iptv/countries/cn.m3u';
+
+var state = {
+  channels: DEFAULTS.concat(store.get('custom', [])),
+  favs: store.get('favs', []),
+  group: store.get('group', '') || '演示',
+  keyword: '',
+  currentUrl: '',
+  lastIndex: -1
+};
+
+/* ================= 工具 ================= */
+function toast(msg, ms){
+  var t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._tm); t._tm=setTimeout(function(){t.classList.remove('show');}, ms||2400);
+}
+function esc(s){
+  return String(s).replace(/[&<>"']/g,function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+function isFav(url){ return state.favs.indexOf(url)>=0; }
+function toggleFav(url){
+  var i=state.favs.indexOf(url);
+  if(i>=0) state.favs.splice(i,1); else state.favs.push(url);
+  store.set('favs', state.favs);
+}
+
+/* ================= 分组与过滤 ================= */
+var GROUP_ORDER = ['收藏','演示','在线库','导入','公共源','自定义','其他'];
+function groups(){
+  var counts = {};
+  state.channels.forEach(function(c){
+    var g = c.group||'其他';
+    if(g==='收藏') return;
+    counts[g] = (counts[g]||0)+1;
+  });
+  var order = Object.keys(counts).sort(function(a,b){
+    var ia=GROUP_ORDER.indexOf(a), ib=GROUP_ORDER.indexOf(b);
+    if(ia<0) ia=99; if(ib<0) ib=99;
+    return ia-ib || (a<b?-1:1);
+  });
+  if(state.favs.length) order = ['收藏'].concat(order);
+  return order.map(function(g){
+    return {name:g, count: g==='收藏' ? state.favs.length : counts[g]};
+  });
+}
+function visible(){
+  var kw = state.keyword.trim().toLowerCase();
+  var searching = state.group === '搜索结果';
+  var out = [];
+  state.channels.forEach(function(c){
+    var okG = searching ? true
+      : state.group==='收藏' ? isFav(c.url)
+      : (c.group||'其他')===state.group;
+    if(!okG) return;
+    if(kw && (c.name||'').toLowerCase().indexOf(kw)<0 && (c.group||'').toLowerCase().indexOf(kw)<0) return;
+    out.push(c);
+  });
+  return out;
+}
+
+/* ================= 渲染：分组 ================= */
+function renderCats(){
+  var bar = $('catBar'); bar.innerHTML = '';
+  var gs;
+  if(state.keyword.trim()){
+    gs = [{name:'搜索结果', count: visible().length}];
+  } else {
+    gs = groups();
+    if(!gs.some(function(g){return g.name===state.group;})){
+      state.group = gs.length ? gs[0].name : '';
+    }
+  }
+  gs.forEach(function(g){
+    var d = document.createElement('div');
+    d.className = 'cat'+(state.group===g.name?' on':'');
+    d.innerHTML = esc(g.name)+'<small>'+g.count+'</small>';
+    d.onclick = function(){
+      state.keyword=''; $('searchInput').value='';
+      state.group = g.name; store.set('group', g.name);
+      renderCats(); renderList(true);
+    };
+    bar.appendChild(d);
+  });
+  $('axisGroup').textContent = 'BLK ' + (state.keyword?'检索':state.group||'—');
+}
+
+/* ================= 渲染：频道（分块渲染） ================= */
+var CHUNK = 150, shown = 0, io = null;
+function renderList(reset){
+  var box = $('chList');
+  if(reset){ shown = 0; box.innerHTML=''; box.scrollTop = 0; }
+  var list = visible();
+  var end = Math.min(shown+CHUNK, list.length);
+  var frag = document.createDocumentFragment();
+  for(var i=shown;i<end;i++) frag.appendChild(row(list[i], i));
+  box.appendChild(frag);
+  shown = end;
+  $('footCount').textContent = 'TOTAL ' + list.length;
+  $('axisTotal').textContent = 'CHANNELS ' + String(state.channels.length).padStart(3,'0');
+}
+function row(c, i){
+  var d = document.createElement('div');
+  d.className = 'ch'+(c.url===state.currentUrl?' on':'');
+  d.setAttribute('role','button'); d.tabIndex = 0;
+  var fav = isFav(c.url);
+  var showGroup = state.group==='搜索结果' || state.group==='收藏';
+  d.innerHTML =
+    '<span class="n">'+(i+1)+'</span>' +
+    '<span class="nm" title="'+esc(c.name)+'">'+esc(c.name)+'</span>' +
+    (showGroup && c.group!=='收藏' ? '<span class="g">'+esc(c.group)+'</span>' : '') +
+    '<span class="star'+(fav?' on':'')+'" title="收藏">'+(fav?'★':'☆')+'</span>';
+  d.querySelector('.star').onclick = function(ev){
+    ev.stopPropagation();
+    toggleFav(c.url);
+    renderCats(); renderList(true); updateFavBtn();
+  };
+  var go = function(){ playChannel(i); };
+  d.onclick = go;
+  d.onkeydown = function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
+  return d;
+}
+/* 滚动到底自动续载 */
+(function(){
+  var box = $('chList');
+  io = new IntersectionObserver(function(entries){
+    if(entries[0].isIntersecting && shown < visible().length){
+      renderList(false);
+    }
+  }, {root:box, rootMargin:'300px'});
+  var s = document.createElement('div');
+  s.style.height='1px'; box.parentNode.insertBefore(s, box.nextSibling);
+  io.observe(s);
+})();
+
+/* ================= 状态显示 ================= */
+function setAxis(cls, text){
+  var d = $('axisDot');
+  d.className = 'dot ' + (cls||'');
+  $('axisState').textContent = text;
+}
+function center(title, sub, spinner){
+  var box = $('centerBox');
+  box.innerHTML = '';
+  if(spinner){ var sp=document.createElement('div'); sp.className='spinner'; box.appendChild(sp); }
+  var t=document.createElement('div'); t.className='t1'; t.textContent=title; box.appendChild(t);
+  if(sub){ var s=document.createElement('div'); s.className='t2'; s.textContent=sub; box.appendChild(s); }
+  box.classList.remove('hidden');
+}
+function centerBtns(defs){
+  var box = $('centerBox');
+  defs.forEach(function(d){
+    var b = document.createElement('button');
+    b.textContent = d.text; b.className = d.oxide ? 'oxide' : 'ghost';
+    b.style.margin = '0 5px';
+    b.onclick = d.fn;
+    box.appendChild(b);
+  });
+}
+function hideCenter(){ $('centerBox').classList.add('hidden'); }
+
+var osdTimer;
+function showOsd(num, name, playing){
+  $('osdNum').textContent = num;
+  $('osdName').textContent = name;
+  var o = $('osd');
+  o.classList.toggle('playing', !!playing);
+  o.classList.add('show');
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(function(){ o.classList.remove('show'); }, 3200);
+}
+function updateFavBtn(){
+  $('btnFav2').textContent = state.currentUrl && isFav(state.currentUrl) ? '★ 已藏' : '☆ 收藏';
+}
+
+/* ================= 播放 ================= */
+function destroyHls(){ if(hls){ try{hls.destroy();}catch(e){} hls=null; } }
+
+function playChannel(index){
+  var list = visible();
+  if(index<0 || index>=list.length) return;
+  var ch = list[index];
+  state.lastIndex = index;
+  state.currentUrl = ch.url;
+  store.set('lastUrl', ch.url);
+
+  $('curName').textContent = ch.name;
+  $('curGroup').textContent = (ch.group||'其他').toUpperCase() + ' · ' + VERSION;
+  updateFavBtn();
+  renderList(true);
+  showOsd(index+1, ch.name, false);
+  $('sidebar').classList.remove('open');
+
+  destroyHls();
+  setAxis('busy','TUNING');
+  center('正在连接 · '+ch.name, ch.url, true);
+
+  var isM3u8 = /\.m3u8(\?|#|$)/i.test(ch.url);
+
+  if(isM3u8 && window.Hls && Hls.isSupported()){
+    hls = new Hls({
+      lowLatencyMode:true,
+      backBufferLength:30,
+      maxBufferLength:24,
+      manifestLoadingTimeOut:12000,
+      manifestLoadingMaxRetry:2,
+      levelLoadingTimeOut:12000,
+      fragLoadingTimeOut:20000
+    });
+    hls.loadSource(ch.url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+    hls.on(Hls.Events.ERROR, function(evt, data){
+      if(!data.fatal) return;
+      if(data.type===Hls.ErrorTypes.MEDIA_ERROR){
+        try{ hls.recoverMediaError(); return; }catch(e){}
+      }
+      fail(data.type===Hls.ErrorTypes.NETWORK_ERROR
+        ? '源不可达（网络错误）'
+        : '解析失败（'+(data.details||data.type)+'）');
+    });
+  } else if(!isM3u8 || video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src = ch.url;
+    tryPlay();
+  } else {
+    fail('当前浏览器不支持此流格式');
+  }
+
+  function fail(msg){
+    setAxis('err','OFFLINE');
+    center('播放失败 · '+ch.name, msg+'。该源可能已失效、受地域限制或格式不兼容。', false);
+    centerBtns([
+      {text:'⟳ 重试', oxide:true, fn:function(){ playChannel(state.lastIndex); }},
+      {text:'⏭ 下一个频道', fn:function(){ step(1); }}
+    ]);
+  }
+}
+
+function tryPlay(){
+  var p = video.play();
+  if(p && p.catch){
+    p.catch(function(){
+      video.muted = true;
+      updateMuteIcon();
+      var p2 = video.play();
+      if(p2 && p2.catch){
+        p2.catch(function(){
+          center('点击播放', '浏览器自动播放策略需要你手动确认', false);
+          var b=document.createElement('button');
+          b.className='bigplay'; b.title='播放'; b.setAttribute('aria-label','播放');
+          b.onclick=function(){ hideCenter(); video.play(); };
+          $('centerBox').appendChild(b);
+        });
+      } else {
+        $('unmuteBtn').classList.add('show');
+      }
+    });
+  }
+}
+$('unmuteBtn').onclick = function(){
+  video.muted = false; updateMuteIcon();
+  this.classList.remove('show');
+  toast('声音已恢复');
+};
+
+function step(dir){
+  var list = visible();
+  if(!list.length) return;
+  var idx = state.lastIndex<0 ? 0 : (state.lastIndex+dir+list.length)%list.length;
+  playChannel(idx);
+}
+
+/* ================= 视频事件 ================= */
+var wasLive = false;
+video.addEventListener('playing', function(){
+  setAxis('ok','LIVE');
+  hideCenter();
+  $('unmuteBtn').classList.toggle('show', video.muted && !!state.currentUrl);
+  showOsd($('osdNum').textContent, $('curName').textContent, true);
+});
+video.addEventListener('waiting', function(){ setAxis('busy','BUFFER'); });
+video.addEventListener('pause', function(){ setAxis('','PAUSED'); });
+video.addEventListener('volumechange', updateMuteIcon);
+video.addEventListener('error', function(){
+  if(!state.currentUrl) return;
+  setAxis('err','OFFLINE');
+  center('播放失败', '视频解码出错或源不可用，请尝试其它频道。', false);
+  centerBtns([
+    {text:'⟳ 重试', oxide:true, fn:function(){ playChannel(state.lastIndex); }},
+    {text:'⏭ 下一个频道', fn:function(){ step(1); }}
+  ]);
+});
+
+/* 点击播放/暂停，双击全屏 */
+var clickTimer = null;
+video.addEventListener('click', function(){
+  clearTimeout(clickTimer);
+  clickTimer = setTimeout(function(){
+    if(video.paused) video.play(); else video.pause();
+  }, 240);
+});
+video.addEventListener('dblclick', function(){
+  clearTimeout(clickTimer);
+  toggleFull();
+});
+
+/* ================= 音量 ================= */
+var savedVol = store.get('vol', 80);
+video.volume = savedVol/100;
+var volRange = $('volRange');
+volRange.value = savedVol;
+function paintVol(){
+  volRange.style.setProperty('--pct', volRange.value+'%');
+}
+paintVol();
+volRange.addEventListener('input', function(){
+  video.volume = this.value/100;
+  video.muted = false;
+  store.set('vol', +this.value);
+  paintVol();
+});
+function updateMuteIcon(){
+  $('btnMute').textContent = (video.muted||video.volume===0) ? '静音' : '有声';
+}
+function toggleMute(){ video.muted=!video.muted; updateMuteIcon(); }
+$('btnMute').onclick = toggleMute;
+
+/* ================= 控制按钮 ================= */
+$('btnPrev').onclick = function(){ step(-1); };
+$('btnNext').onclick = function(){ step(1); };
+$('btnPlay').onclick = function(){ if(video.paused) video.play(); else video.pause(); };
+video.addEventListener('playing', function(){ $('btnPlay').textContent='暂停'; });
+video.addEventListener('pause',  function(){ $('btnPlay').textContent='播放'; });
+
+$('btnFav2').onclick = function(){
+  if(!state.currentUrl){ toast('请先选择一个频道'); return; }
+  toggleFav(state.currentUrl);
+  renderCats(); renderList(true); updateFavBtn();
+  toast(isFav(state.currentUrl)?'已加入收藏':'已取消收藏');
+};
+$('btnCopy').onclick = function(){
+  if(!state.currentUrl){ toast('当前没有播放源'); return; }
+  var url = state.currentUrl;
+  var done = function(){ toast('源地址已复制'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done, function(){ fallbackCopy(url); done(); });
+  } else { fallbackCopy(url); done(); }
+};
+function fallbackCopy(text){
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+}
+function toggleFull(){
+  if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(function(){});
+}
+$('btnFull').onclick = toggleFull;
+$('btnPip').onclick = function(){
+  if(document.pictureInPictureElement) document.exitPictureInPicture();
+  else if(video.requestPictureInPicture) video.requestPictureInPicture().catch(function(){ toast('画中画暂不可用'); });
+  else toast('当前浏览器不支持画中画');
+};
+
+/* ================= 主题 ================= */
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  $('btnTheme').textContent = t==='dark' ? '◐ 昼间' : '☾ 夜间';
+  store.set('theme', t);
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.content = t==='dark' ? '#2b2823' : '#c9c5bf';
+}
+applyTheme(document.documentElement.dataset.theme==='dark' ? 'dark' : 'light');
+$('btnTheme').onclick = function(){
+  applyTheme(document.documentElement.dataset.theme==='dark' ? 'light' : 'dark');
+};
+
+/* ================= 搜索 ================= */
+$('searchInput').addEventListener('input', function(){
+  state.keyword = this.value;
+  if(this.value.trim()) state.group = '搜索结果';
+  renderCats(); renderList(true);
+});
+$('searchInput').addEventListener('keydown', function(e){
+  if(e.key==='Enter' && this.value.trim()){
+    if(visible().length) playChannel(0);
+    this.blur();
+  }
+  e.stopPropagation();
+});
+
+/* ================= M3U ================= */
+function parseM3U(text){
+  var out=[], pending=null;
+  text.split(/\r?\n/).forEach(function(raw){
+    var line = raw.trim();
+    if(!line) return;
+    if(line.indexOf('#EXTINF')===0){
+      var name = line.split(',').pop().trim();
+      var m = line.match(/group-title="([^"]*)"/i);
+      pending = {name:name||'未命名', group:(m&&m[1].trim())||'导入'};
+    } else if(line.charAt(0)==='#'){
+      return;
+    } else if(/^https?:\/\//i.test(line)){
+      out.push({name:pending?pending.name:'未命名', group:'导入', url:line});
+      pending = null;
+    }
+  });
+  var seen={}, dedup=[];
+  out.forEach(function(c){ if(!seen[c.url]){ seen[c.url]=1; dedup.push(c); } });
+  return dedup;
+}
+function persistCustom(chs, cap){
+  var custom = store.get('custom', []);
+  custom = custom.concat(chs);
+  store.set('custom', custom.slice(-(cap||800)));
+}
+
+/* ================= 弹窗 ================= */
+function openModal(id){ $(id).classList.add('show'); var f=$(id).querySelector('input,textarea'); if(f) setTimeout(function(){f.focus();},50); }
+function closeModals(){
+  ['modalAdd','modalImport','modalHelp'].forEach(function(id){ $(id).classList.remove('show'); });
+}
+document.querySelectorAll('[data-close]').forEach(function(el){
+  el.onclick = closeModals;
+  el.onkeydown = function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); closeModals(); } };
+});
+document.querySelectorAll('.mask').forEach(function(m){
+  m.addEventListener('click', function(e){ if(e.target===m) closeModals(); });
+});
+$('btnHelp').onclick = function(){ openModal('modalHelp'); };
+$('btnMenu').onclick = function(){ $('sidebar').classList.toggle('open'); };
+
+/* 添加频道 */
+$('btnAdd').onclick = function(){
+  $('addName').value=''; $('addUrl').value=''; $('addGroup').value='自定义';
+  openModal('modalAdd');
+};
+$('addConfirm').onclick = function(){
+  var name=$('addName').value.trim(), url=$('addUrl').value.trim();
+  var group=$('addGroup').value.trim()||'自定义';
+  if(!name || !/^https?:\/\//i.test(url)){ toast('请填写名称和合法的 http(s) 地址'); return; }
+  var ch={name:name,group:group,url:url};
+  persistCustom([ch]);
+  state.channels.push(ch);
+  state.keyword=''; $('searchInput').value='';
+  state.group=group; store.set('group',group);
+  renderCats(); renderList(true); closeModals();
+  toast('已添加 · '+name);
+  playChannel(visible().length-1);
+};
+
+/* 导入 */
+$('btnImport').onclick = function(){
+  $('importUrl').value=''; $('importText').value='';
+  openModal('modalImport');
+};
+$('importConfirm').onclick = function(){
+  var u=$('importUrl').value.trim(), t=$('importText').value.trim();
+  if(u){
+    setAxis('busy','FETCH');
+    fetch(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(doImport)
+      .catch(function(err){ setAxis('','STANDBY'); toast('下载失败：'+err.message+'（可能跨域受限），请改用粘贴'); });
+  } else if(t){ doImport(t); }
+  else toast('请填写链接或粘贴内容');
+};
+function doImport(text){
+  var chs = parseM3U(text);
+  if(!chs.length){ toast('未解析到任何频道'); return; }
+  persistCustom(chs.slice(0,500));
+  var exist={}; state.channels.forEach(function(c){exist[c.url]=1;});
+  var added=0;
+  chs.forEach(function(c){ if(!exist[c.url]){ state.channels.push(c); exist[c.url]=1; added++; } });
+  state.keyword=''; $('searchInput').value='';
+  state.group='导入'; store.set('group','导入');
+  renderCats(); renderList(true); closeModals();
+  setAxis('','STANDBY');
+  toast('导入完成 · 新增 '+added+'（解析 '+chs.length+' 条）');
+}
+
+/* 在线频道库 */
+$('btnOnline').onclick = function(){
+  setAxis('busy','FETCH');
+  center('正在下载在线频道库', '来源 iptv.org 公开项目，可能需要数秒', true);
+  fetch(ONLINE_URL).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(function(text){
+      hideCenter();
+      var chs = parseM3U(text);
+      if(!chs.length) throw new Error('列表为空');
+      chs.forEach(function(c){ c.group='在线库'; });
+      var custom = store.get('custom',[]).filter(function(c){return c.group!=='在线库';});
+      store.set('custom', custom.concat(chs.slice(0,600)));
+      state.channels = state.channels.filter(function(c){ return c.group!=='在线库'; });
+      var exist={}; state.channels.forEach(function(c){exist[c.url]=1;});
+      var added=0;
+      chs.forEach(function(c){ if(!exist[c.url]){ state.channels.push(c); exist[c.url]=1; added++; } });
+      state.keyword=''; $('searchInput').value='';
+      state.group='在线库'; store.set('group','在线库');
+      renderCats(); renderList(true);
+      setAxis('','STANDBY');
+      toast('在线库已更新 · '+added+' 个频道');
+    })
+    .catch(function(err){
+      hideCenter(); setAxis('err','OFFLINE');
+      center('在线频道库下载失败', '原因：'+err.message+'。可能是网络问题，可稍后再试或手动导入 M3U。', false);
+      centerBtns([{text:'⟳ 重试', oxide:true, fn:function(){ $('btnOnline').click(); }}]);
+    });
+};
+
+/* ================= 键盘 ================= */
+var digitBuf='', digitTimer=null;
+document.addEventListener('keydown', function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+
+  switch(e.key){
+    case 'ArrowUp': case 'PageUp':   e.preventDefault(); step(-1); break;
+    case 'ArrowDown': case 'PageDown': e.preventDefault(); step(1); break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      video.volume=Math.max(0,video.volume-0.05); video.muted=false;
+      volRange.value=video.volume*100; store.set('vol',volRange.value); paintVol(); break;
+    case 'ArrowRight':
+      e.preventDefault();
+      video.volume=Math.min(1,video.volume+0.05); video.muted=false;
+      volRange.value=video.volume*100; store.set('vol',volRange.value); paintVol(); break;
+    case ' ': e.preventDefault(); if(video.paused) video.play(); else video.pause(); break;
+    case 'm': case 'M': toggleMute(); break;
+    case 'f': case 'F': toggleFull(); break;
+    case '/': e.preventDefault(); $('searchInput').focus(); break;
+    case '?': openModal('modalHelp'); break;
+    case 'Escape':
+      if(document.querySelector('.mask.show')) closeModals();
+      else if(digitBuf) clearDigits();
+      else if(state.keyword){ state.keyword=''; $('searchInput').value=''; renderCats(); renderList(true); }
+      break;
+    case 'Enter':
+      if(digitBuf) commitDigits();
+      break;
+    default:
+      if(e.key>='0' && e.key<='9'){
+        digitBuf = (digitBuf+e.key).slice(-3);
+        var od=$('osdDigits'); od.textContent=digitBuf+'_';
+        od.classList.add('show');
+        clearTimeout(digitTimer);
+        digitTimer=setTimeout(commitDigits,1300);
+      }
+  }
+});
+function clearDigits(){
+  digitBuf='';
+  clearTimeout(digitTimer);
+  $('osdDigits').classList.remove('show');
+}
+function commitDigits(){
+  var od=$('osdDigits'); od.classList.remove('show');
+  if(!digitBuf) return;
+  var n=parseInt(digitBuf,10); digitBuf='';
+  var list=visible();
+  if(n>=1 && n<=list.length) playChannel(n-1);
+  else toast('没有频道 '+n+'（当前共 '+list.length+' 个）');
+}
+
+/* ================= 初始化 ================= */
+updateMuteIcon();
+updateFavBtn();
+renderCats();
+renderList(true);
+
+/* 恢复上次频道 */
+var lastUrl = store.get('lastUrl','');
+if(lastUrl){
+  var ch = null;
+  state.channels.forEach(function(c){ if(c.url===lastUrl) ch=c; });
+  if(ch){
+    if(ch.group!=='收藏'){
+      state.group = ch.group||'其他';
+      store.set('group', state.group);
+    }
+    renderCats(); renderList(true);
+    var vis=visible(), vi=-1;
+    for(var j=0;j<vis.length;j++){ if(vis[j].url===lastUrl){ vi=j; break; } }
+    if(vi>=0) playChannel(vi);
+  }
+}
+})();
+</script>
+</body>
+</html>
